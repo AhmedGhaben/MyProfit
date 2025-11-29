@@ -1,0 +1,40 @@
+myprofit/
+    __init__.py
+    main.py                  # entry point (for iteration 1, can be CLI)
+
+    finance/
+        __init__.py
+        models.py            # dataclasses for Salary, Expense, Budget, MonthlyReport
+        engine.py            # FinancialEngine class
+        reports.py           # text/structured reports
+    
+    market/
+        __init__.py
+        models.py            # Candle, PriceTick, Symbol, etc.
+        provider_base.py     # abstract MarketDataProvider
+        oanda_provider.py    # implementation (maybe mocked for now)
+        binance_provider.py  # same (maybe mocked)
+
+    account/
+        __init__.py
+        models.py            # Position, AccountState, RiskMetrics
+        service.py           # AccountService to fetch/update state
+    
+    trading/
+        __init__.py
+        engine.py            # TradingEngine class
+        strategy_base.py     # Strategy protocol/interface
+        strategies/
+            __init__.py
+            moving_average.py
+            breakout.py
+        risk.py              # risk management logic
+
+    storage/
+        __init__.py
+        trade_history.py     # saving trade history (file/db, for iter 2)
+
+    ui/
+        __init__.py
+        cli.py               # CLI for iter 1
+        web/                 # (optional for iter 2, if you choose web UI)
