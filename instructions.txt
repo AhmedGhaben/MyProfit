@@ -1,3 +1,77 @@
+Good evening!
+One of the components of the assessment is the project
+
+== Iteration 0: 5 points
+Deadline: November 16, 11:59 PM
+
+Requires the following:
+- project idea
+- who is working on it with (if not just one) and obtains agreement from the assistant/seminarist
+- repository link
+- 2-3 features per person for each iteration (1 and 2), described in the repository README
+
+Projects are initially individual, but we are willing to accept projects for two people as an exception, as long as the code each participant writes is clearly outlined and the project complexity is comparable. However, approval from the reviewers is required before this.
+
+Iteration 0 is handed over to the assistant.
+
+== Iteration 1:
+Deadline: November 28th
+- The implementation of the first features from the idea is assessed.
+- The assistant comes up with a feature for the student to implement, which will need to be implemented by Iteration 2. Student suggestions are welcome :)
+
+Scoring:
+
+FOR CODE STYLE:
+> 2 points - Logical structure; logical separation into functions, classes, and modules with their own responsibilities. Application of the single responsibility principle.
+> 2 points - Correct implementation of classes - working with inheritance and encapsulation; using classmethod, staticmethod, and property where appropriate.
+> 1 point - PEP8 compliance: names, spaces, etc.
+> 4 points - Meaningful documentation for modules, classes, and functions; use of type hints using the typing module. Writing protocols where necessary/using dataclass/pydantic.
+> 1 point - Correct error handling and edge cases. Writing your own error messages when necessary.
+Total: 10 points
+
+FOR IMPLEMENTATION:
+Code complexity, correct module selection, and completeness of implementation of features selected in Iteration 0 - 10 points
+
+Final score for Iteration 1: {30} * {code style} * {implementation} / 100
+
+== Iteration 2:
+Deadline: December 12
+- Features from the idea + assistant's feature + edits for Iteration 1 are evaluated (iterations can be increased in points if they are corrected in a reasonable time)
+- Tests are evaluated
+- For the promotion phase: a report is generated profiling functions and methods, analyzing their performance, and suggesting improvements
+
+Scoring:
+Code style - see Iteration 1
+Implementation of features from Iteration 0 + assistant's feature: up to 10 points. If the assistant's feature isn't implemented, you can't get more than 7 points. If you haven't received a working project by the end of Iteration 2, you can't get more than 4 points for its implementation.
+
+Total for Iteration 2: {30} * {codestyle} * {implementation} / 100
+10 points for tests (we look at their implementation and coverage)
+
+
+Total:
+base: 5 + 30 + 30 + 10 = 85
+
+The following project topics CANNOT be selected as project topics this year:
+
+- Tetris
+- Snake
+- Mazes
+- Text editor
+- Archiver, encryptor/decoder
+- Telegram bots WITHOUT any logical component (just the "we can press buttons" format. If the Telegram bot is an interface for something fully functional, then that's awesome, no problem)
+- Clickers
+
+- The repository can be created on either GitHub or GitLab, unless the assistant has a preference. The repository must be private; only you/the project authors (if there are two of you), your assistant, and the seminar participant (but not necessarily all at once) can be added to it.
+
+- After creating the repository (and, accordingly, the main/master branch), we create a dev branch from it and conduct further development there.
+
+- Upon completion of an iteration (0, 1, or 2), you create an iter_0, iter_1, or iter_2 branch from the dev branch. Then, create a merge request from it to main and assign it to the assistant as a reviewer.
+
+- Don't forget to include all the key, up-to-date information about the project in the README.md (what it's about, how to run it, who the authors are).
+- Uploading "extra" files is strongly discouraged and will result in a deduction of points. Examples: pycache, MACOS, .venv, and others. HINT: you can use gitignore.
+
+
+
 myprofit/
     __init__.py
     main.py                  # entry point (for iteration 1, can be CLI)
