@@ -4,14 +4,14 @@ import pandas as pd
 price = pd.read_csv("price.csv") #example
 
 #imports live data from yfinance
-livetest = pd.DataFrame()
-livetest = livetest.ta.ticker("btc-usd", period="5d", interval="15m")
+live_test = pd.DataFrame()
+live_test = live_test.ta.ticker("btc-usd", period="5d", interval="15m")
 
 def calc_ema(df, l: int):
     emaname = f"EMA{l}"
     df[emaname] = ta.ema(df["Close"], length=l)
 
-def cross58(df):
+def cross_58(df):
     calc_ema(df, 5)
     calc_ema(df, 8)
     lastcandle = df.iloc[-1]
@@ -29,10 +29,10 @@ def cross58(df):
 
 
 #print(price)
-#print(cross58(price))
-print(livetest)
-#print(cross58(livetest))
+#print(cross_58(price))
+print(live_test)
+#print(cross_58(live_test))
 
 #while True:
-    #if (cross58(livetest)):
-        #print(cross58(livetest))
+    #if (cross_58(live_test)):
+        #print(cross_58(live_test))

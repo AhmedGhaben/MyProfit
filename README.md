@@ -3,25 +3,30 @@
 Oscar Prada and Ahmed Ghaben 
 
 MyProfit is a personal finance and automated trading system.  
-It integrates financial analysis, market data, trading strategies, and risk management to help users manage budgets and trade assets on platforms like OANDA or Binance.
+It integrates financial analysis, market data, trading strategies, and risk management to help users manage budgets and trade assets.
 
-## Iteration 1 — Core System
+## Iteration 1 ï¿½ Core System
 
-### 1. Financial Engine
+### 1. Financial Engine (Ahmed)
 Handles all personal finance logic.  
 Features include:
 - Analysis of salary, expenses, and budgets  
 - Monthly financial reports  
 - Savings recommendations  
-- Budget suggestions used by the trading engine  
+- Budget suggestions used by the trading engine
 
-### 2. Market Data
+#### 30th november: Class FinantialEngine with core functionalities and related classes were implemented.
+
+### 2. Market Data (Oscar)
 Fetches market information from broker APIs (OANDA, Binance):
 - Real-time and historical asset prices
 - Candlestick data
 - Market spreads and volatility
 
 Data is normalized for use by the trading engine.
+
+#### 30th november: Created script to connect to the broker (Currently waiting for approval from the broker to access the API)
+
 
 ### 3. Account State
 Fetches the current state of the trading account:
@@ -38,13 +43,17 @@ Fetches the current state of the trading account:
 
 ---
 
-## Iteration 2 — UI and other features
+### ** Features related to the trading execution be worked on during the second iteration due to setbacks when setting up the broker account.
 
-### 5. Trading Strategies
+## Iteration 2 ï¿½ UI and other features
+
+### 5. Trading Strategies (Oscar)
 A module for developing strategies for the trading engine:
 - Moving averages
 - Breakout strategies
 - Risk-based rules
+
+#### 30th november: Implemented an exponential moving average (EMA) crossover strategy and tested it with real market data.
 
 ### 6. Trade History
 Stores all executed trades and provides analytics:
