@@ -81,7 +81,6 @@ class Expense:
       )
 
 
-
 @dataclass(frozen=True)
 class Income:
   source: str
@@ -97,11 +96,11 @@ class Income:
     return asdict(self)
 
 @dataclass
-class MonethlyReport:
+class MonthlyReport:
   income:float
-  total_expences:float
+  total_expenses:float
   net_cash:float
-  recomended_saving:float
+  recommended_saving:float
   trading_budget:float
   def to_dict(self) -> dict[str, Any]:
     return asdict(self)
@@ -111,42 +110,4 @@ class MonethlyReport:
 class Budget:
   total_income= float
   catagory_limit: Mapping[ExpenseCategory, float]
-  saving_target= float =0.0
-
-
-
-DEFAULT_CATEGORY_PERCENTS: dict[ExpenseCategory, float] = {
-    ExpenseCategory.HOUSING: 0.30,
-    ExpenseCategory.FOOD: 0.15,
-    ExpenseCategory.TRANSPORT: 0.05,
-    ExpenseCategory.UTILITIES: 0.05,
-    ExpenseCategory.ENTERTAINMENT: 0.10,
-    ExpenseCategory.OTHER: 0.15,  
-}
-
-DEFAULT_SAVINGS_PERCENT: float = 0.20
-
-def build_budget_from_income(total_income: float) -> Budget:
-  """Create a Budget using a fixed percentage-based plan."""
-  if total_income < 0:
-    raise ValueError("total_income cannot be negative")
-
-  category_limits = {
-    category: total_income * pct
-    for category, pct in DEFAULT_CATEGORY_PERCENTS.items()
-  }
-
-  savings_target = total_income * DEFAULT_SAVINGS_PERCENT
-
-  return Budget(
-    total_income=total_income,
-    category_limits=category_limits,
-    savings_target=savings_target,
-  )
-
-
-"""
-def ramaining_for(self, catagory:ExpenseCategory, spent:float) -> float:
-limit = self.catagory_limit.get(catagory, 0.0)
-return max(limit - spent, 0.0)
-"""
+  savings_target= float =0.0
