@@ -100,8 +100,7 @@ myprofit/
         strategy_base.py     # Strategy protocol/interface
         strategies/
             __init__.py
-            moving_average.py
-            breakout.py
+            ema.py
         risk.py              # risk management logic
 
     storage/
