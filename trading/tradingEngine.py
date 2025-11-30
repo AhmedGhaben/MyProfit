@@ -8,4 +8,3 @@ class tradingEngine:
 
   this will be done using the broker's API (sending and receiving Protobuf messages)
   """
-
