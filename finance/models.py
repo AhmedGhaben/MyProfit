@@ -5,16 +5,18 @@ from typing import Any, Mapping
 
 
 class FinanceError(ValueError):
-  #Base error
-  pass
+    """Base error for finance-related problems."""
+    pass
 
-class NegativeAmountError:
-  #Amount mmust be non negative
-  pass
+
+class NegativeAmountError(FinanceError):
+    """Amount must be non-negative."""
+    pass
+
 
 class InvalidAmountError(FinanceError):
-  #invaid money amount type 
-  pass
+    """Invalid money amount type (not int/float)."""
+    pass
 
 class InvalidCategoryError(FinanceError):
   #might not need it if we make the category buttons
@@ -41,13 +43,14 @@ class Expense:
   """
   amount: float
   category: ExpenseCategory
-  description:str | None=None
+  description: str | None = None
 
-  def __post_init__(self):
+  def __post_init__(self) -> None:
     if not isinstance(self.amount, (int, float)):
-      raise InvalidAmountError("Expence amount must be int or float. ")
-    if self.amount < 0: 
-      raise NegativeAmountError("Expence amount cannot be positive. ")
+      raise InvalidAmountError("Expense amount must be int or float.")
+    if self.amount < 0:
+      raise NegativeAmountError("Expense amount cannot be negative.")
+
   
   def to_dict(self) -> dict[str, Any]:
     data = asdict(self)
@@ -55,30 +58,38 @@ class Expense:
     return data
   
   @classmethod
-  def from_dict(cls, data:Mapping[str, Any]) -> "Expense":
+  def from_dict(cls, data: Mapping[str, Any]) -> "Expense":
     if "amount" not in data:
-      raise FinanceError("Missing required field: 'Amount'")
+      raise FinanceError("Missing required field: 'amount'")
     if "category" not in data:
       raise FinanceError("Missing required field: 'category'")
+
     amount = data["amount"]
     category_raw = data["category"]
-    description = data.get('discription') # not required
+    description = data.get("description")  # optional
 
     if isinstance(category_raw, ExpenseCategory):
       category = category_raw
     elif isinstance(category_raw, str):
       try:
-        categort = ExpenseCategory(category_raw.lower())
+        category = ExpenseCategory(category_raw.lower())
       except ValueError:
         valid = ", ".join(c.value for c in ExpenseCategory)
-        raise InvalidCategoryError(f"Invalid category: {category_raw}\ncategory must be one of: {valid}")
-    else: 
-      raise InvalidCategoryError("category must be a string or a ExpenseCategory object. ")
+        raise InvalidCategoryError(
+          f"Invalid category: {category_raw}. "
+          f"Category must be one of: {valid}"
+          )
+    else:
+      raise InvalidCategoryError(
+        "category must be a string or an ExpenseCategory object."
+      )
+
     return cls(
       amount=float(amount),
       category=category,
       description=description,
-      )
+    )
+
 
 
 @dataclass(frozen=True)
