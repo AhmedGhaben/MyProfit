@@ -1,26 +1,22 @@
-# Byte-compiled / optimized / DLL files
+# Python bytecode
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
 
-# Virtual environments
+# Virtualenvs
 .venv/
 venv/
 env/
 
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-
-# IDE / editor settings
-.vscode/
-.idea/
-*.swp
-
-# OS files
+# OS junk
 .DS_Store
-Thumbs.db
 
-# Logs
-*.log
+# Runtime data
+storage/*.json
+
+# Secrets / env files
+.env
+*.env
+
+
+config.py

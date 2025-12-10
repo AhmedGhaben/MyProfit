@@ -1,3 +1,4 @@
+"""Core domain models for the personal finance engine."""
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -23,7 +24,7 @@ class InvalidCategoryError(FinanceError):
   pass
 
 class ExpenseCategory(Enum):
-  #categories for personal expenses
+    """Categories for personal expenses."""
     HOUSING = "housing"
     FOOD = "food"
     TRANSPORT = "transport"
@@ -94,31 +95,36 @@ class Expense:
 
 @dataclass(frozen=True)
 class Income:
+  """Monthly income of the user."""
   source: str
   amount: float
 
   def __post_init__(self) -> None:
     if not isinstance(self.amount, (int, float)):
-      raise FinanceError()#should be number
-    if self.amount < 0: 
-      raise FinanceError()#cannot be negative
-    
+      raise FinanceError("Income amount must be int or float.")
+    if self.amount < 0:
+      raise FinanceError("Income amount cannot be negative.")
+
   def to_dict(self) -> dict[str, Any]:
     return asdict(self)
 
 @dataclass
 class MonthlyReport:
-  income:float
-  total_expenses:float
-  net_cash:float
-  recommended_saving:float
-  trading_budget:float
+  """A report of income expenses net cash and trading budget """
+  income: float
+  total_expenses: float
+  net_cash: float
+  recommended_saving: float
+  trading_budget: float
+
+
   def to_dict(self) -> dict[str, Any]:
     return asdict(self)
 
 
 @dataclass
 class Budget:
+  """Spending limits and savings target derived from income."""
   total_income: float
   category_limit: Mapping[ExpenseCategory, float]
   savings_target: float =0.0
