@@ -1,5 +1,5 @@
-from dataclasses import dataclass, asdict
 from __future__ import annotations
+from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any, Mapping
 
@@ -16,12 +16,12 @@ class InvalidAmountError(FinanceError):
   #invaid money amount type 
   pass
 
-class InvalidCatagoryError(FinanceError):
-  #might not need it if we make the catagory buttons
+class InvalidCategoryError(FinanceError):
+  #might not need it if we make the category buttons
   pass
 
 class ExpenseCategory(Enum):
-  #catagories for personal expenses
+  #categories for personal expenses
     HOUSING = "housing"
     FOOD = "food"
     TRANSPORT = "transport"
@@ -36,11 +36,11 @@ class Expense:
   """
   arguments:
   -amount(must be float or int and non negative)
-  -catagory:object (probably buttons in the telegram bot)
+  -category:object (probably buttons in the telegram bot)
   -description optional
   """
   amount: float
-  catagory: ExpenseCategory
+  category: ExpenseCategory
   description:str | None=None
 
   def __post_init__(self):
@@ -51,32 +51,32 @@ class Expense:
   
   def to_dict(self) -> dict[str, Any]:
     data = asdict(self)
-    data["catagory"] = self.catagory.value
+    data["category"] = self.category.value
     return data
   
   @classmethod
   def from_dict(cls, data:Mapping[str, Any]) -> "Expense":
     if "amount" not in data:
       raise FinanceError("Missing required field: 'Amount'")
-    if "catagory" not in data:
-      raise FinanceError("Missing required field: 'Catagory'")
+    if "category" not in data:
+      raise FinanceError("Missing required field: 'category'")
     amount = data["amount"]
-    catagory_raw = data["catagory"]
+    category_raw = data["category"]
     description = data.get('discription') # not required
 
-    if isinstance(catagory_raw, ExpenseCategory):
-      catagory = catagory_raw
-    elif isinstance(catagory_raw, str):
+    if isinstance(category_raw, ExpenseCategory):
+      category = category_raw
+    elif isinstance(category_raw, str):
       try:
-        catagort = ExpenseCategory(catagory_raw.lower())
+        categort = ExpenseCategory(category_raw.lower())
       except ValueError:
         valid = ", ".join(c.value for c in ExpenseCategory)
-        raise InvalidCatagoryError(f"Invalid catagory: {catagory_raw}\nCatagory must be one of: {valid}")
+        raise InvalidCategoryError(f"Invalid category: {category_raw}\ncategory must be one of: {valid}")
     else: 
-      raise InvalidCatagoryError("Catagory must be a string or a ExpenseCategory object. ")
+      raise InvalidCategoryError("category must be a string or a ExpenseCategory object. ")
     return cls(
       amount=float(amount),
-      catagory=catagory,
+      category=category,
       description=description,
       )
 
@@ -108,6 +108,6 @@ class MonthlyReport:
 
 @dataclass
 class Budget:
-  total_income= float
-  catagory_limit: Mapping[ExpenseCategory, float]
-  savings_target= float =0.0
+  total_income: float
+  category_limit: Mapping[ExpenseCategory, float]
+  savings_target: float =0.0

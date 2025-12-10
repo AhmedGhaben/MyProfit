@@ -1,0 +1,21 @@
+{
+  "6356099273": {
+    "income": {
+      "source": "salary",
+      "amount": 4000.0
+    },
+    "expenses": [
+      {
+        "amount": 1666.67,
+        "category": "HOUSING",
+        "description": "Rent"
+      },
+      {
+        "amount": 120.0,
+        "category": "TRANSPORT",
+        "description": "Metro card subscription"
+      }
+    ],
+    "custom_trading_budget": 900.0
+  }
+}
