@@ -7,7 +7,7 @@ from .models import (
     FinanceError,
 )
 
-from .financial_engine import FinancialEngine, build_budget_from_income
+from .financialEngine import FinancialEngine, build_budget_from_income
 
 __all__ = [
     "Expense",
