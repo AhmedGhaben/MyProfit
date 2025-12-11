@@ -1,27 +1,30 @@
-from dataclasses import dataclass, asdict
+"""Core domain models for the personal finance engine."""
 from __future__ import annotations
+from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any, Mapping
 
 
 class FinanceError(ValueError):
-  #Base error
-  pass
+    """Base error for finance-related problems."""
+    pass
 
-class NegativeAmountError:
-  #Amount mmust be non negative
-  pass
+
+class NegativeAmountError(FinanceError):
+    """Amount must be non-negative."""
+    pass
+
 
 class InvalidAmountError(FinanceError):
-  #invaid money amount type 
-  pass
+    """Invalid money amount type (not int/float)."""
+    pass
 
-class InvalidCatagoryError(FinanceError):
-  #might not need it if we make the catagory buttons
+class InvalidCategoryError(FinanceError):
+  #might not need it if we make the category buttons
   pass
 
 class ExpenseCategory(Enum):
-  #catagories for personal expenses
+    """Categories for personal expenses."""
     HOUSING = "housing"
     FOOD = "food"
     TRANSPORT = "transport"
@@ -36,78 +39,92 @@ class Expense:
   """
   arguments:
   -amount(must be float or int and non negative)
-  -catagory:object (probably buttons in the telegram bot)
+  -category:object (probably buttons in the telegram bot)
   -description optional
   """
   amount: float
-  catagory: ExpenseCategory
-  description:str | None=None
+  category: ExpenseCategory
+  description: str | None = None
 
-  def __post_init__(self):
+  def __post_init__(self) -> None:
     if not isinstance(self.amount, (int, float)):
-      raise InvalidAmountError("Expence amount must be int or float. ")
-    if self.amount < 0: 
-      raise NegativeAmountError("Expence amount cannot be positive. ")
+      raise InvalidAmountError("Expense amount must be int or float.")
+    if self.amount < 0:
+      raise NegativeAmountError("Expense amount cannot be negative.")
+
   
   def to_dict(self) -> dict[str, Any]:
     data = asdict(self)
-    data["catagory"] = self.catagory.value
+    data["category"] = self.category.value
     return data
   
   @classmethod
-  def from_dict(cls, data:Mapping[str, Any]) -> "Expense":
+  def from_dict(cls, data: Mapping[str, Any]) -> "Expense":
     if "amount" not in data:
-      raise FinanceError("Missing required field: 'Amount'")
-    if "catagory" not in data:
-      raise FinanceError("Missing required field: 'Catagory'")
-    amount = data["amount"]
-    catagory_raw = data["catagory"]
-    description = data.get('discription') # not required
+      raise FinanceError("Missing required field: 'amount'")
+    if "category" not in data:
+      raise FinanceError("Missing required field: 'category'")
 
-    if isinstance(catagory_raw, ExpenseCategory):
-      catagory = catagory_raw
-    elif isinstance(catagory_raw, str):
+    amount = data["amount"]
+    category_raw = data["category"]
+    description = data.get("description")  # optional
+
+    if isinstance(category_raw, ExpenseCategory):
+      category = category_raw
+    elif isinstance(category_raw, str):
       try:
-        catagort = ExpenseCategory(catagory_raw.lower())
+        category = ExpenseCategory(category_raw.lower())
       except ValueError:
         valid = ", ".join(c.value for c in ExpenseCategory)
-        raise InvalidCatagoryError(f"Invalid catagory: {catagory_raw}\nCatagory must be one of: {valid}")
-    else: 
-      raise InvalidCatagoryError("Catagory must be a string or a ExpenseCategory object. ")
+        raise InvalidCategoryError(
+          f"Invalid category: {category_raw}. "
+          f"Category must be one of: {valid}"
+          )
+    else:
+      raise InvalidCategoryError(
+        "category must be a string or an ExpenseCategory object."
+      )
+
     return cls(
       amount=float(amount),
-      catagory=catagory,
+      category=category,
       description=description,
-      )
+    )
+
 
 
 @dataclass(frozen=True)
 class Income:
+  """Monthly income of the user."""
   source: str
   amount: float
 
   def __post_init__(self) -> None:
     if not isinstance(self.amount, (int, float)):
-      raise FinanceError()#should be number
-    if self.amount < 0: 
-      raise FinanceError()#cannot be negative
-    
+      raise FinanceError("Income amount must be int or float.")
+    if self.amount < 0:
+      raise FinanceError("Income amount cannot be negative.")
+
   def to_dict(self) -> dict[str, Any]:
     return asdict(self)
 
 @dataclass
 class MonthlyReport:
-  income:float
-  total_expenses:float
-  net_cash:float
-  recommended_saving:float
-  trading_budget:float
+  """A report of income expenses net cash and trading budget """
+  income: float
+  total_expenses: float
+  net_cash: float
+  recommended_saving: float
+  trading_budget: float
+
+
   def to_dict(self) -> dict[str, Any]:
     return asdict(self)
 
 
 @dataclass
 class Budget:
-  total_income= float
-  catagory_limit: Mapping[ExpenseCategory, float]
-  savings_target= float =0.0
+  """Spending limits and savings target derived from income."""
+  total_income: float
+  category_limit: Mapping[ExpenseCategory, float]
+  savings_target: float =0.0
