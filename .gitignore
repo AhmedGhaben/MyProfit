@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *.pyo
 
+#idea
+.idea/
+
 # Virtualenvs
 .venv/
 venv/
@@ -20,3 +23,5 @@ storage/*.json
 
 
 config.py
+
+market/binance_credentials.py
