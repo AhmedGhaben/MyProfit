@@ -1,77 +1,240 @@
 import pandas as pd
 import pandas_ta as ta
-from market import CandleData
+from market import CandleData, Transaction
+import json
+import os
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Tuple
+from pathlib import Path
 
+@dataclass
 class EMACrossoverStrategy:
     """
-    EMA crossover strategy: signals when EMA5 crosses EMA8
-    Works with CandleData from Binance
-    Generates separate boolean flags for signals
+    EMA crossover strategy using EMA5 and EMA8
     """
-    def __init__(self, candle_data: CandleData):
-        self.candle_data = candle_data
-        self.df = pd.DataFrame()
+    candle_data: CandleData
+    df: pd.DataFrame = field(default_factory=pd.DataFrame)
 
-    def fetch_data(self, symbol, interval='1m', lookback='10 minutes ago UTC'):
-        """Fetch historical candle data from Binance"""
+    def fetch_data(self, symbol: str, interval: str = "1m",
+                   lookback: str = "10 minutes ago UTC") -> pd.DataFrame:
+        """Fetch historical candle data."""
         self.df = self.candle_data.get_candles(symbol, interval=interval, start_str=lookback)
         return self.df
 
-    def calc_ema(self, length: int, column="close"):
-        """Calculate EMA of given length"""
-        ema_name = f"EMA{length}"
-        self.df[ema_name] = ta.ema(self.df[column], length=length)
-        return self.df
+    def calc_ema(self, length: int, column: str = "close") -> None:
+        """Calculate EMA and store it in the dataframe."""
+        ema_col = f"EMA{length}"
 
-    def cross58_signal(self):
-        """
-        Check if EMA5 crossed EMA8 in the last candle
-        Returns a tuple of booleans: (buy_signal, sell_signal)
-        """
-        buy_signal = False
-        sell_signal = False
+        if ema_col not in self.df.columns:
+            self.df[ema_col] = ta.ema(self.df[column], length=length)
 
-        if self.df.empty or len(self.df) < 2:
-            return buy_signal, sell_signal
+    def cross58_signal(self) -> tuple[bool, bool]:
+        """
+        Returns (buy_signal, sell_signal):
+        buy_signal = EMA5 crosses above EMA8
+        sell_signal = EMA5 crosses below EMA8
+        """
+        if len(self.df) < 2:
+            return False, False
 
         self.calc_ema(5)
         self.calc_ema(8)
 
-        last_candle = self.df.iloc[-1]
-        prev_candle = self.df.iloc[-2]
+        last = self.df.iloc[-1]
+        prev = self.df.iloc[-2]
 
-        # EMA5 cross above EMA8 (Buy)
-        if last_candle["EMA5"] > last_candle["EMA8"] and prev_candle["EMA5"] < prev_candle["EMA8"]:
-            buy_signal = True
+        buy = last.EMA5 > last.EMA8 and prev.EMA5 < prev.EMA8
+        sell = last.EMA5 < last.EMA8 and prev.EMA5 > prev.EMA8
 
-        # EMA5 cross below EMA8 (Sell)
-        elif last_candle["EMA5"] < last_candle["EMA8"] and prev_candle["EMA5"] > prev_candle["EMA8"]:
-            sell_signal = True
+        return buy, sell
 
-        return buy_signal, sell_signal
-
-    def run_live_ema(self, symbol, interval='1m', poll_interval=15):
-        """
-        Continuously fetch latest candles and generate boolean signals
-        """
+    def live_ema(self, symbol: str, interval: str = "1m",
+                 poll_interval: int = 15) -> None:
+        """print signals continuously"""
         import time
-        print(f"Starting live EMA crossover signal generator for {symbol} ({interval})...")
+
+        print(f"Started live EMA crossover for {symbol} ({interval})")
 
         while True:
             try:
-                self.df = self.candle_data.get_candles(symbol, interval=interval, start_str='5 minutes ago UTC')
-                buy_signal, sell_signal = self.cross58_signal()
+                self.df = self.candle_data.get_candles(
+                    symbol, interval=interval, start_str="30 minutes ago UTC"
+                )
 
-                if buy_signal:
+                buy, sell = self.cross58_signal()
+
+                if buy:
                     print("BUY signal detected")
-                if sell_signal:
+                elif sell:
                     print("SELL signal detected")
 
                 time.sleep(poll_interval)
 
             except KeyboardInterrupt:
-                print("Live signal generator stopped by user.")
+                print("Stopped by user.")
                 break
             except Exception as e:
-                print(f"Error fetching live candles: {e}")
+                print(f"Error: {e}")
                 time.sleep(poll_interval)
+
+
+@dataclass
+class Trade:
+    """
+    Executes trades based on boolean signals,
+    blocks new trades if one is already open,
+    logs everything to trade_history.json
+    and automatically closes position if Binance shows no open orders.
+    """
+    transaction: Transaction
+    symbol: str
+    quantity: float
+    entry_price: float | None = None
+    take_profit: float | None = None
+    stop_loss: float | None = None
+
+    history_file: str = "MyProfit/storage/trade_history.json"
+    last_signal: Tuple[bool, bool] = field(default_factory=lambda: (False, False))
+
+    in_position: bool = False
+    open_side: str | None = None
+
+
+
+    def process_signals(self, signals: Tuple[bool, bool]):
+        buy_signal, sell_signal = signals
+
+        if signals == self.last_signal:
+            return None
+
+        self.last_signal = signals
+
+        if self.in_position:
+            print("Trade blocked: already in a position.")
+            return None
+
+        if buy_signal and not sell_signal:
+            return self._open_position("BUY")
+
+        if sell_signal and not buy_signal:
+            return self._open_position("SELL")
+
+        return None
+
+
+
+    def _open_position(self, side: str, take_profit=None, stop_loss=None, risk_reward_ratio=1):
+        # EXECUTE BUY / SELL
+        if side == "BUY":
+            order = self.transaction.buy(symbol=self.symbol, quantity=self.quantity, take_profit=None, stop_loss=None)
+        else:
+            order = self.transaction.sell(symbol=self.symbol, quantity=self.quantity, take_profit=None, stop_loss=None)
+
+        # Extract executed entry price
+        executed = float(order["fills"][0]["price"])
+
+        # Save entry
+        self.entry_price = executed
+
+        # Compute SL/TP if not provided
+        if take_profit is None or stop_loss is None:
+            # BUY position
+            if side == "BUY":
+                self.stop_loss = executed * 0.99
+                self.take_profit = executed * (1 + (1 - 0.99) * risk_reward_ratio)
+            # SELL position
+            else:
+                self.stop_loss = executed * 1.01
+                self.take_profit = executed * (1 - (1.01 - 1) * risk_reward_ratio)
+
+        else:
+            self.take_profit = take_profit
+            self.stop_loss = stop_loss
+
+        print(f"[POSITION OPEN] {side} @ {executed}, TP={self.take_profit}, SL={self.stop_loss}")
+
+        self.in_position = True
+        self.open_side = side
+        self._log_trade(f"OPEN_{side}", order)
+
+        return order
+
+    def _close_market(self, side):
+        try:
+            order = (
+                self.transaction.sell(self.symbol, self.quantity) if side == "SELL"
+                else self.transaction.buy(self.symbol, self.quantity)
+            )
+        except Exception as e:
+            print(f"ERROR closing position via {side}: {e}")
+            return
+
+        print(f"CLOSED via {side}: {order}")
+        self._log_trade(f"AUTO_CLOSE_{side}", order)
+
+        # Reset
+        self.in_position = False
+        self.open_side = None
+        self.entry_price = None
+        self.take_profit = None
+        self.stop_loss = None
+
+    #Trading log
+    def _log_trade(self, event_type: str, order: dict):
+        """Append executed trade info to trade_history.json"""
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": event_type,
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "order": order,
+            "in_position_after": self.in_position
+        }
+
+        if os.path.exists(self.history_file):
+            with open(self.history_file, "r") as f:
+                try:
+                    history = json.load(f)
+                except json.JSONDecodeError:
+                    history = []
+        else:
+            history = []
+
+        history.append(log_entry)
+
+        with open(self.history_file, "w") as f:
+            json.dump(history, f, indent=4)
+
+        print(f"Logged: {event_type}")
+
+
+
+    def check_tp_sl(self):
+        if not self.in_position:
+            return
+
+        try:
+            ticker = self.transaction.client.get_symbol_ticker(symbol=self.symbol)
+            current_price = float(ticker["price"])
+        except Exception as e:
+            print(f"Error fetching price: {e}")
+            return
+
+        print(f"Current price: {current_price}")
+
+        if self.open_side == "BUY":
+            if current_price >= self.take_profit:
+                print("TAKE PROFIT HIT")
+                self._close_market("SELL")
+            elif current_price <= self.stop_loss:
+                print("STOP LOSS HIT")
+                self._close_market("SELL")
+
+        elif self.open_side == "SELL":
+            if current_price <= self.take_profit:
+                print("TAKE PROFIT HIT")
+                self._close_market("BUY")
+            elif current_price >= self.stop_loss:
+                print("STOP LOSS HIT")
+                self._close_market("BUY")

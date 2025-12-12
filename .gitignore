@@ -24,4 +24,4 @@ storage/*.json
 
 config.py
 
-market/binance_credentials.py
+trading/binance_credentials.py
