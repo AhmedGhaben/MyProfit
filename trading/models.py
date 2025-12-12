@@ -8,6 +8,22 @@ from datetime import datetime, timezone
 from typing import Tuple
 from pathlib import Path
 
+
+# Compute project root
+BASE_DIR = Path(__file__).resolve().parents[1]   # this gives: MyProfit/
+
+# Define full path to trade history file
+HISTORY_PATH = BASE_DIR / "storage" / "trade_history.json"
+
+# Ensure storage/ exists
+os.makedirs(BASE_DIR / "storage", exist_ok=True)
+
+# Ensure file exists
+if not HISTORY_PATH.exists():
+    with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+        json.dump([], f)
+
+
 @dataclass
 class EMACrossoverStrategy:
     """
@@ -94,7 +110,7 @@ class Trade:
     take_profit: float | None = None
     stop_loss: float | None = None
 
-    history_file: str = "MyProfit/storage/trade_history.json"
+    history_file: str = "storage/trade_history.json"
     last_signal: Tuple[bool, bool] = field(default_factory=lambda: (False, False))
 
     in_position: bool = False
