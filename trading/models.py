@@ -157,12 +157,12 @@ class Trade:
         if take_profit is None or stop_loss is None:
             # BUY position
             if side == "BUY":
-                self.stop_loss = executed * 0.99
-                self.take_profit = executed * (1 + (1 - 0.99) * risk_reward_ratio)
+                self.stop_loss = executed * 0.996
+                self.take_profit = executed * (1 + (1 - 0.996) * risk_reward_ratio)
             # SELL position
             else:
-                self.stop_loss = executed * 1.01
-                self.take_profit = executed * (1 - (1.01 - 1) * risk_reward_ratio)
+                self.stop_loss = executed * 1.004
+                self.take_profit = executed * (1 - (1.004 - 1) * risk_reward_ratio)
 
         else:
             self.take_profit = take_profit
@@ -175,6 +175,8 @@ class Trade:
         self._log_trade(f"OPEN_{side}", order)
 
         return order
+
+
 
     def _close_market(self, side):
         try:
@@ -195,6 +197,7 @@ class Trade:
         self.entry_price = None
         self.take_profit = None
         self.stop_loss = None
+
 
     #Trading log
     def _log_trade(self, event_type: str, order: dict):

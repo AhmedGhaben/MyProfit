@@ -13,7 +13,7 @@ API_SECRET = binance_credentials.API_SECRET
 
 
 # Poll interval (seconds)
-POLL_INTERVAL = 15
+POLL_INTERVAL = 10
 
 # Global switch (do not auto-run on import)
 RUN_BOT = False
