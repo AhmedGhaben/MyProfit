@@ -157,12 +157,12 @@ class Trade:
         if take_profit is None or stop_loss is None:
             # BUY position
             if side == "BUY":
-                self.stop_loss = executed * 0.996
-                self.take_profit = executed * (1 + (1 - 0.996) * risk_reward_ratio)
+                self.stop_loss = executed * 0.9992
+                self.take_profit = executed * (1 + (1 - 0.9992) * risk_reward_ratio)
             # SELL position
             else:
-                self.stop_loss = executed * 1.004
-                self.take_profit = executed * (1 - (1.004 - 1) * risk_reward_ratio)
+                self.stop_loss = executed * 1.002
+                self.take_profit = executed * (1 - (1.0002 - 1) * risk_reward_ratio)
 
         else:
             self.take_profit = take_profit

@@ -98,7 +98,7 @@ class Transaction:
         self.client = Client(self.api_key, self.api_secret, testnet=self.testnet)
         self.client.API_URL = self.api_url
 
-    def buy(self, symbol, quantity, take_profit, stop_loss):
+    def buy(self, symbol, quantity, take_profit=None, stop_loss=None):
         order = self.client.order_market_buy(symbol=symbol, quantity=quantity)
         executed = float(order["fills"][0]["price"])
 
@@ -106,7 +106,7 @@ class Transaction:
 
         return order
 
-    def sell(self, symbol, quantity, take_profit, stop_loss):
+    def sell(self, symbol, quantity, take_profit=None, stop_loss=None):
         order = self.client.order_market_sell(symbol=symbol, quantity=quantity)
         executed = float(order["fills"][0]["price"])
 

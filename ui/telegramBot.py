@@ -18,6 +18,9 @@ import os
 import json
 from pathlib import Path
 from typing import Dict
+import tempfile
+from datetime import datetime
+from typing import Any, List
 
 from telegram import (
     Update,
@@ -57,6 +60,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 DATA_FILE = Path(__file__).resolve().parents[1] / "storage" / "user_finances.json"
 DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+TRADE_HISTORY_FILE = Path(__file__).resolve().parents[1] / "storage" / "trade_history.json"
 
 # In-memory mapping: telegram_user_id -> FinancialEngine
 user_engines: Dict[int, FinancialEngine] = {}
@@ -517,13 +521,137 @@ async def trading_status_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     label = "Stop trading" if current else "Start trading"
     state_text = "Trading is currently ON." if current else "Trading is currently OFF."
 
-    keyboard = [[InlineKeyboardButton(label, callback_data="toggle_trading")]]
+    keyboard = [
+    [InlineKeyboardButton(label, callback_data="toggle_trading")],
+    [InlineKeyboardButton("Trade report", callback_data="trade_report")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
         f"{state_text}\n\nUse the button below to toggle trading.",
         reply_markup=reply_markup,
     )
+async def trade_report_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Sends a clean trade history summary + an optional graph (executed price over time).
+    """
+    query = update.callback_query
+    await query.answer()
+
+    history = load_trade_history()
+    if not history:
+        await query.edit_message_text(
+            "No trades found yet.\n\n"
+            "I couldn't find storage/trade_history.json or it is empty."
+        )
+        return
+
+    # Sort by timestamp
+    history.sort(
+        key=lambda x: _safe_parse_ts(
+            x.get("timestamp", "1970-01-01T00:00:00+00:00")
+        )
+    )
+
+    total = len(history)
+
+    # Count by event
+    by_event: dict[str, int] = {}
+    for item in history:
+        ev = str(item.get("event", "UNKNOWN"))
+        by_event[ev] = by_event.get(ev, 0) + 1
+
+    counts_parts = [f"{k}:{by_event[k]}" for k in sorted(by_event.keys())]
+    counts_line = " | ".join(counts_parts)
+
+    # Build a clean table of last N events
+    N = 8
+    tail = history[-N:]
+
+    def fmt_time(ts: str) -> str:
+        # ISO -> "YYYY-MM-DD HH:MM"
+        dt = _safe_parse_ts(ts)
+        return dt.strftime("%Y-%m-%d %H:%M")
+
+    rows = []
+    rows.append("Time              Event   Side   Price")
+    rows.append("-" * 44)
+
+    for item in tail:
+        ts_raw = item.get("timestamp", "")
+        ev = str(item.get("event", "UNKNOWN"))
+
+        # Shorten event label
+        if ev.startswith("AUTO_CLOSE"):
+            ev_short = "CLOSE"
+        elif ev.startswith("OPEN"):
+            ev_short = "OPEN"
+        else:
+            ev_short = ev[:8]
+
+        order = item.get("order") or {}
+        side = str(order.get("side", ""))
+        side_short = "B" if side.upper() == "BUY" else ("S" if side.upper() == "SELL" else "-")
+
+        px = _extract_executed_price(item)
+        px_txt = f"{px:.2f}" if px is not None else "n/a"
+
+        t_txt = fmt_time(ts_raw) if ts_raw else "unknown"
+        rows.append(f"{t_txt:<17} {ev_short:<6} {side_short:<6} {px_txt:>8}")
+
+    # Telegram "table" via code block
+    text = (
+        "Trade report\n\n"
+        f"Total events: {total}\n"
+        f"Counts: {counts_line}\n\n"
+        "Last events:\n"
+        f"```text\n{chr(10).join(rows)}\n```"
+    )
+
+    await query.edit_message_text(text, parse_mode="Markdown")
+
+    # ---- Graph (executed price over time) ----
+    times = []
+    prices = []
+    for item in history:
+        px = _extract_executed_price(item)
+        ts = item.get("timestamp")
+        if px is None or not ts:
+            continue
+        times.append(_safe_parse_ts(ts))
+        prices.append(px)
+
+    if len(prices) < 2:
+        return
+
+    import matplotlib.pyplot as plt
+
+    plt.figure()
+    plt.scatter(times, prices)  # dots are easier to understand than a connected line
+    plt.xlabel("Time")
+    plt.ylabel("Executed price")
+    plt.title("Executed trade prices over time")
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        plot_path = tmp.name
+
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=150)
+    plt.close()
+
+    try:
+        await context.bot.send_photo(
+            chat_id=query.message.chat_id,
+            photo=open(plot_path, "rb"),
+            caption="Each dot is one executed trade price at that time.",
+        )
+    finally:
+        try:
+            os.remove(plot_path)
+        except OSError:
+            pass
 
 
 async def toggle_trading_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -621,7 +749,7 @@ def build_application(token: str | None = None) -> Application:
     app.add_handler(CommandHandler("trading", trading_status_menu))
     app.add_handler(CallbackQueryHandler(toggle_trading_button, pattern=r"^toggle_trading$"))
     app.add_handler(CommandHandler("cancel", cancel))
-
+    app.add_handler(CallbackQueryHandler(trade_report_button, pattern=r"^trade_report$"))
     return app
 
 
@@ -629,3 +757,30 @@ def run_bot(token: str | None = None) -> None:
     application = build_application(token)
     logger.info("Starting MyProfit Telegram bot...")
     application.run_polling()
+def _safe_parse_ts(ts: str) -> datetime:
+    # Example: "2025-12-12T19:29:53.897328+00:00" :contentReference[oaicite:1]{index=1}
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def _extract_executed_price(item: dict) -> float | None:
+    """
+    Extract an executed price from a trade-history event.
+    Uses the first fill price if present.
+    """
+    order = item.get("order") or {}
+    fills = order.get("fills") or []
+    if not fills:
+        return None
+    try:
+        return float(fills[0].get("price"))
+    except Exception:
+        return None
+
+
+def load_trade_history() -> list[dict]:
+    if not TRADE_HISTORY_FILE.exists():
+        return []
+    try:
+        return json.loads(TRADE_HISTORY_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
