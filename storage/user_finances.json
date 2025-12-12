@@ -21,6 +21,7 @@
         "description": null
       }
     ],
-    "custom_trading_budget": 900.0
+    "custom_trading_budget": 900.0,
+    "trading_enabled": true
   }
 }

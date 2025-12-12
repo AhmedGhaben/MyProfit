@@ -20,8 +20,17 @@ storage/*.json
 # Secrets / env files
 .env
 *.env
-
+.venv312
+*.venv312
+.venv
+*.venv
 
 config.py
 
 trading/binance_credentials.py
+
+config.py
+trading/binance_credentials.py
+storage/*.json
+.venv/
+__pycache__/

@@ -5,6 +5,7 @@ try:
 except ImportError:
     raise RuntimeError(
         "Missing config.py. "
+        
         "Copy config_example.py to config.py and set TELEGRAM_BOT_TOKEN there."
     )
 

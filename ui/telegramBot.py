@@ -9,7 +9,8 @@ Features:
 - /report              : monthly report with saving target + trading budget
 - /set_trading_budget  : user-controlled trading budget
 - /expenses_detail     : detailed expenses report
-- JSON persistence for income, expenses, custom trading budget
+- /trading             : show trading status and toggle start/stop (UI state only)
+- JSON persistence for income, expenses, custom trading budget, trading state
 """
 
 import logging
@@ -60,6 +61,9 @@ DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
 # In-memory mapping: telegram_user_id -> FinancialEngine
 user_engines: Dict[int, FinancialEngine] = {}
 
+# Per-user trading state (True = trading ON, False = OFF)
+user_trading_state: Dict[int, bool] = {}
+
 # Conversation states
 (
     SET_INCOME_AMOUNT,
@@ -71,8 +75,7 @@ user_engines: Dict[int, FinancialEngine] = {}
 
 
 def save_engine_for_user(user_id: int, engine: FinancialEngine) -> None:
-    """Persist income, expenses and custom trading budget for one user."""
-    # Load existing JSON
+    """Persist income, expenses, custom trading budget and trading state for one user."""
     if DATA_FILE.exists():
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -83,50 +86,48 @@ def save_engine_for_user(user_id: int, engine: FinancialEngine) -> None:
     else:
         data = {}
 
-    # ---- Income ----
-    # We don't depend on Income.to_dict here, just read attributes.
     income_payload = {
         "source": getattr(engine.income, "source", "income"),
         "amount": float(getattr(engine.income, "amount", 0.0)),
     }
 
-    # ---- Expenses ----
-    # Manually serialise each Expense object to a simple dict.
     expenses_payload = []
     for e in engine.expenses:
         try:
             expenses_payload.append(
                 {
                     "amount": float(e.amount),
-                    # store enum *name* so we can reconstruct it later
-                    "category": e.category.name,
+                    "category": e.category.name,  # enum name, e.g. "FOOD"
                     "description": e.description,
                 }
             )
         except Exception as exc:
-            logger.warning("Failed to serialise expense %r for user %s: %s", e, user_id, exc)
+            logger.warning(
+                "Failed to serialise expense %r for user %s: %s",
+                e,
+                user_id,
+                exc,
+            )
 
-    # ---- Custom trading budget ----
     custom_trading_budget = getattr(engine, "custom_trading_budget", None)
+    trading_enabled = user_trading_state.get(user_id, False)
 
-    # ---- Store into dict for this user ----
     data[str(user_id)] = {
         "income": income_payload,
         "expenses": expenses_payload,
         "custom_trading_budget": custom_trading_budget,
+        "trading_enabled": trading_enabled,
     }
 
-    # ---- Write file ----
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
     logger.info("Saved finance data for user %s to %s", user_id, DATA_FILE)
 
 
-
 def load_engines_from_file() -> None:
-    """Restore all FinancialEngine instances from JSON on startup."""
-    global user_engines
+    """Restore all FinancialEngine instances and trading state from JSON on startup."""
+    global user_engines, user_trading_state
 
     if not DATA_FILE.exists():
         logger.info("No existing data file found at %s", DATA_FILE)
@@ -146,7 +147,6 @@ def load_engines_from_file() -> None:
         except ValueError:
             continue
 
-        # ---- Income ----
         income_payload = payload.get("income")
         if income_payload is None:
             continue
@@ -158,7 +158,6 @@ def load_engines_from_file() -> None:
                     amount=float(income_payload.get("amount", 0.0)),
                 )
             else:
-                # backward compatibility: income was stored as plain number
                 income = Income(source="salary", amount=float(income_payload))
         except Exception as exc:
             logger.warning("Failed to restore income for user %s: %s", user_id, exc)
@@ -166,31 +165,24 @@ def load_engines_from_file() -> None:
 
         engine = FinancialEngine(income=income)
 
-        # ---- Expenses ----
         expenses_payload = payload.get("expenses", [])
         for e_data in expenses_payload:
             try:
                 amount = float(e_data.get("amount", 0.0))
-
-                # support both "category" (new) and "category" (if we ever wrote that)
-                cat_key = e_data.get("category") or e_data.get("category")
+                cat_key = e_data.get("category")
                 if cat_key is None:
                     continue
-
-                # cat_key is enum name, e.g. "FOOD"
                 category = ExpenseCategory[cat_key]
-
                 description = e_data.get("description")
-                expense = Expense(
-                    amount=amount,
-                    category=category,
-                    description=description,
-                )
+                expense = Expense(amount=amount, category=category, description=description)
                 engine.expenses.append(expense)
             except Exception as exc:
-                logger.warning("Failed to restore one expense for user %s: %s", user_id, exc)
+                logger.warning(
+                    "Failed to restore one expense for user %s: %s",
+                    user_id,
+                    exc,
+                )
 
-        # ---- Custom trading budget ----
         custom_tb = payload.get("custom_trading_budget")
         if isinstance(custom_tb, (int, float)):
             try:
@@ -198,26 +190,22 @@ def load_engines_from_file() -> None:
             except Exception:
                 pass
 
+        trading_enabled = bool(payload.get("trading_enabled", False))
+        user_trading_state[user_id] = trading_enabled
+
         user_engines[user_id] = engine
         restored_count += 1
 
     logger.info("Restored %d user(s) from %s", restored_count, DATA_FILE)
 
 
-
-# Load persisted engines on import
 load_engines_from_file()
 
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
+
 def get_engine_for_user(user_id: int) -> FinancialEngine | None:
     return user_engines.get(user_id)
 
 
-# -----------------------------------------------------------------------------
-# /start and /help
-# -----------------------------------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     text = (
@@ -229,6 +217,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /report – show monthly finance report\n"
         "• /expenses_detail – detailed expenses report\n"
         "• /set_trading_budget – choose your trading budget\n"
+        "• /trading – start/stop trading (UI flag)\n"
         "• /help – show all commands\n"
     )
     await update.message.reply_text(text)
@@ -242,14 +231,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• /report – see monthly report and trading budget\n"
         "• /expenses_detail – detailed expenses by category\n"
         "• /set_trading_budget – set or reset your trading budget\n"
+        "• /trading – show trading status and toggle start/stop (UI flag)\n"
         "• /cancel – cancel current operation\n"
     )
     await update.message.reply_text(text)
 
 
-# -----------------------------------------------------------------------------
-# /set_income conversation
-# -----------------------------------------------------------------------------
 async def set_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         "Great, let's set your monthly income.\n"
@@ -288,9 +275,6 @@ async def set_income_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
-# -----------------------------------------------------------------------------
-# /add_expense conversation
-# -----------------------------------------------------------------------------
 async def add_expense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     engine = get_engine_for_user(user_id)
@@ -307,9 +291,7 @@ async def add_expense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        "Choose an expense category:", reply_markup=reply_markup
-    )
+    await update.message.reply_text("Choose an expense category:", reply_markup=reply_markup)
     return ADD_EXPENSE_CATEGORY
 
 
@@ -322,9 +304,7 @@ async def select_expense_category(update: Update, context: ContextTypes.DEFAULT_
         _, cat_name = data.split(":", maxsplit=1)
         category = ExpenseCategory[cat_name]
     except (ValueError, KeyError):
-        await query.edit_message_text(
-            "Unknown category. Please run /add_expense again."
-        )
+        await query.edit_message_text("Unknown category. Please run /add_expense again.")
         return ConversationHandler.END
 
     context.user_data["expense_category"] = category
@@ -344,16 +324,14 @@ async def set_expense_amount(update: Update, context: ContextTypes.DEFAULT_TYPE)
             raise ValueError()
     except ValueError:
         await update.message.reply_text(
-            "Please send a valid non-negative number for the amount, "
-            "or /cancel to stop."
+            "Please send a valid non-negative number for the amount, or /cancel to stop."
         )
         return ADD_EXPENSE_AMOUNT
 
     context.user_data["expense_amount"] = amount
 
     await update.message.reply_text(
-        "Got it. Optionally send a short description "
-        "(e.g. 'groceries', 'rent').\n"
+        "Got it. Optionally send a short description (e.g. 'groceries', 'rent').\n"
         "If you don't want a description, you can just send '-' ."
     )
     return ADD_EXPENSE_DESCRIPTION
@@ -380,23 +358,15 @@ async def set_expense_description(update: Update, context: ContextTypes.DEFAULT_
         return ConversationHandler.END
 
     try:
-        expense = Expense(
-            amount=amount,
-            category=category,
-            description=description,
-        )
+        expense = Expense(amount=amount, category=category, description=description)
         engine.add_expense(expense)
         save_engine_for_user(user_id, engine)
     except FinanceError as e:
         logger.exception("Failed to add expense for user %s", user_id)
-        await update.message.reply_text(
-            f"Something went wrong when saving the expense: {e}"
-        )
+        await update.message.reply_text(f"Something went wrong when saving the expense: {e}")
         return ConversationHandler.END
 
-    await update.message.reply_text(
-        f"Added expense: {amount:.2f} in {category.value}."
-    )
+    await update.message.reply_text(f"Added expense: {amount:.2f} in {category.value}.")
 
     context.user_data.pop("expense_category", None)
     context.user_data.pop("expense_amount", None)
@@ -404,16 +374,12 @@ async def set_expense_description(update: Update, context: ContextTypes.DEFAULT_
     return ConversationHandler.END
 
 
-# -----------------------------------------------------------------------------
-# /report
-# -----------------------------------------------------------------------------
 async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     engine = get_engine_for_user(user_id)
     if engine is None:
         await update.message.reply_text(
-            "I don't have your income yet.\n\n"
-            "Use /set_income to tell me your monthly income first."
+            "I don't have your income yet.\n\nUse /set_income to tell me your monthly income first."
         )
         return
 
@@ -422,6 +388,7 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     income_amount = getattr(income_obj, "amount", income_obj)
 
     custom_tb = getattr(engine, "custom_trading_budget", None)
+    trading_enabled = user_trading_state.get(user_id, False)
 
     text = (
         "Monthly Financial Report\n\n"
@@ -430,6 +397,7 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"Net cash: {report.net_cash:.2f}\n"
         f"Recommended saving (target): {report.recommended_saving:.2f}\n"
         f"Trading budget in use: {report.trading_budget:.2f}\n"
+        f"Trading status: {'ON' if trading_enabled else 'OFF'}\n"
     )
 
     if custom_tb is not None:
@@ -443,16 +411,12 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(text)
 
 
-# -----------------------------------------------------------------------------
-# /expenses_detail
-# -----------------------------------------------------------------------------
 async def expenses_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     engine = get_engine_for_user(user_id)
     if engine is None:
         await update.message.reply_text(
-            "I don't have your income yet.\n\n"
-            "Use /set_income to tell me your monthly income first."
+            "I don't have your income yet.\n\nUse /set_income to tell me your monthly income first."
         )
         return
 
@@ -474,16 +438,12 @@ async def expenses_detail_command(update: Update, context: ContextTypes.DEFAULT_
     await update.message.reply_text("\n".join(lines))
 
 
-# -----------------------------------------------------------------------------
-# /set_trading_budget conversation
-# -----------------------------------------------------------------------------
 async def set_trading_budget_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user_id = update.effective_user.id    # noqa: F841
+    user_id = update.effective_user.id
     engine = get_engine_for_user(user_id)
     if engine is None:
         await update.message.reply_text(
-            "I don't have your income yet.\n\n"
-            "Use /set_income to tell me your monthly income first."
+            "I don't have your income yet.\n\nUse /set_income to tell me your monthly income first."
         )
         return ConversationHandler.END
 
@@ -507,8 +467,7 @@ async def set_trading_budget_amount(update: Update, context: ContextTypes.DEFAUL
     engine = get_engine_for_user(user_id)
     if engine is None:
         await update.message.reply_text(
-            "I don't have your income yet.\n\n"
-            "Use /set_income to tell me your monthly income first."
+            "I don't have your income yet.\n\nUse /set_income to tell me your monthly income first."
         )
         return ConversationHandler.END
 
@@ -518,9 +477,7 @@ async def set_trading_budget_amount(update: Update, context: ContextTypes.DEFAUL
         if amount < 0:
             raise ValueError()
     except ValueError:
-        await update.message.reply_text(
-            "Please send a valid non-negative number, or 0 to reset to automatic."
-        )
+        await update.message.reply_text("Please send a valid non-negative number, or 0 to reset.")
         return SET_TRADING_BUDGET_AMOUNT
 
     if amount == 0:
@@ -528,8 +485,7 @@ async def set_trading_budget_amount(update: Update, context: ContextTypes.DEFAUL
         save_engine_for_user(user_id, engine)
         auto_budget = engine.trading_budget()
         await update.message.reply_text(
-            f"Trading budget reset to automatic.\n"
-            f"Current automatic trading budget is {auto_budget:.2f}."
+            f"Trading budget reset to automatic.\nCurrent automatic trading budget is {auto_budget:.2f}."
         )
         return ConversationHandler.END
 
@@ -537,32 +493,76 @@ async def set_trading_budget_amount(update: Update, context: ContextTypes.DEFAUL
     if amount > net_cash:
         await update.message.reply_text(
             f"You only have {net_cash:.2f} of net cash available.\n"
-            "Please choose a trading budget less than or equal to that amount, "
-            "or send 0 to reset to automatic."
+            "Choose a trading budget <= that amount, or send 0 to reset."
         )
         return SET_TRADING_BUDGET_AMOUNT
 
     engine.set_trading_budget(amount)
     save_engine_for_user(user_id, engine)
-
-    await update.message.reply_text(
-        f"Trading budget set to {amount:.2f}."
-    )
+    await update.message.reply_text(f"Trading budget set to {amount:.2f}.")
     return ConversationHandler.END
 
 
-# -----------------------------------------------------------------------------
-# /cancel
-# -----------------------------------------------------------------------------
+async def trading_status_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show current trading status and a button to start/stop (UI flag only)."""
+    user_id = update.effective_user.id
+    engine = get_engine_for_user(user_id)
+    if engine is None:
+        await update.message.reply_text(
+            "I don't have your income yet.\n\nUse /set_income to tell me your monthly income first."
+        )
+        return
+
+    current = user_trading_state.get(user_id, False)
+    label = "Stop trading" if current else "Start trading"
+    state_text = "Trading is currently ON." if current else "Trading is currently OFF."
+
+    keyboard = [[InlineKeyboardButton(label, callback_data="toggle_trading")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"{state_text}\n\nUse the button below to toggle trading.",
+        reply_markup=reply_markup,
+    )
+
+
+async def toggle_trading_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Toggle trading state via inline button (UI flag only)."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    engine = get_engine_for_user(user_id)
+    if engine is None:
+        await query.edit_message_text(
+            "I don't have your income yet.\n\nUse /set_income to tell me your monthly income first."
+        )
+        return
+
+    current = user_trading_state.get(user_id, False)
+    new_state = not current
+    user_trading_state[user_id] = new_state
+
+    save_engine_for_user(user_id, engine)
+
+    label = "Stop trading" if new_state else "Start trading"
+    state_text = "Trading is now ON ✅" if new_state else "Trading is now OFF ⛔"
+
+    keyboard = [[InlineKeyboardButton(label, callback_data="toggle_trading")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        f"{state_text}\n\nUse the button below to toggle again.",
+        reply_markup=reply_markup,
+    )
+
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Operation cancelled.")
     context.user_data.clear()
     return ConversationHandler.END
 
 
-# -----------------------------------------------------------------------------
-# Application factory + runner
-# -----------------------------------------------------------------------------
 def build_application(token: str | None = None) -> Application:
     if token is None:
         token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -595,9 +595,7 @@ def build_application(token: str | None = None) -> Application:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, set_expense_amount)
             ],
             ADD_EXPENSE_DESCRIPTION: [
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND, set_expense_description
-                )
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_expense_description)
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
@@ -607,9 +605,7 @@ def build_application(token: str | None = None) -> Application:
         entry_points=[CommandHandler("set_trading_budget", set_trading_budget_start)],
         states={
             SET_TRADING_BUDGET_AMOUNT: [
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND, set_trading_budget_amount
-                )
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_trading_budget_amount)
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
@@ -622,6 +618,8 @@ def build_application(token: str | None = None) -> Application:
     app.add_handler(set_trading_budget_conv)
     app.add_handler(CommandHandler("report", report_command))
     app.add_handler(CommandHandler("expenses_detail", expenses_detail_command))
+    app.add_handler(CommandHandler("trading", trading_status_menu))
+    app.add_handler(CallbackQueryHandler(toggle_trading_button, pattern=r"^toggle_trading$"))
     app.add_handler(CommandHandler("cancel", cancel))
 
     return app
